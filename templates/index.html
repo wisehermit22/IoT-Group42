@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Drink Consumption Tracker</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f4f4f4;
+        }
+        h1, h2 {
+            color: #2c3e50;
+        }
+        #status {
+            background-color: #ecf0f1;
+            border-radius: 5px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        #status p {
+            margin: 10px 0;
+        }
+        form {
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        label {
+            display: inline-block;
+            width: 200px;
+            margin-bottom: 10px;
+        }
+        input[type="number"], input[type="text"] {
+            width: 200px;
+            padding: 5px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+        }
+        button {
+            background-color: #3498db;
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        .locked {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        .unlocked {
+            color: #2ecc71;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Smart Drink Consumption Tracker</h1>
+
+    <div id="status">
+        <p>Consumption Count: <span id="consumption-count">0</span></p>
+        <p>Inventory Count: <span id="inventory-count">0</span></p>
+        <p>Lock Status: <span id="lock-status">Unlocked</span></p>
+        <p>Lockout Countdown: <span id="lockout-countdown">0</span> seconds</p>
+    </div>
+
+    <h2>Update Settings</h2>
+    <form id="settings-form">
+        <label for="consumption-limit">Consumption Limit:</label>
+        <input type="number" id="consumption-limit" name="consumption_limit" required><br>
+
+        <label for="lockout-timer">Lockout Timer (minutes):</label>
+        <input type="number" id="lockout-timer" name="lockout_timer" required><br>
+
+        <label for="inventory-count-input">Inventory Count:</label>
+        <input type="number" id="inventory-count-input" name="inventory_count" required><br>
+
+        <label for="confirmation-phrase">Confirmation Phrase:</label>
+        <input type="text" id="confirmation-phrase" name="confirmation_phrase" required><br>
+
+        <button type="submit">Update Settings</button>
+    </form>
+
+    <h2>Reset Device</h2>
+    <form id="reset-form">
+        <label for="reset-confirmation-phrase">Confirmation Phrase:</label>
+        <input type="text" id="reset-confirmation-phrase" name="confirmation_phrase" required><br>
+
+        <button type="submit">Reset Device</button>
+    </form>
+
+    <script>
+        const socket = io();
+
+        function updateStatus(data) {
+            $('#consumption-count').text(data.consumption_count);
+            $('#inventory-count').text(data.inventory_count);
+            $('#lock-status')
+                .text(data.lock_status ? 'Locked' : 'Unlocked')
+                .removeClass('locked unlocked')
+                .addClass(data.lock_status ? 'locked' : 'unlocked');
+            updateLockoutCountdown(data.lockout_remaining);
+        }
+
+        function updateLockoutCountdown(remaining) {
+            const countdownElement = $('#lockout-countdown');
+            if (remaining > 0) {
+                countdownElement.text(Math.ceil(remaining));
+                setTimeout(() => updateLockoutCountdown(remaining - 1), 1000);
+            } else {
+                countdownElement.text('0');
+            }
+        }
+
+        function showAlert(message, isError = false) {
+            alert(message);
+            // You can replace this with a more sophisticated notification system
+        }
+
+        socket.on('connect', function() {
+            console.log('Connected to server');
+            socket.emit('get_initial_status');
+        });
+
+        socket.on('status_update', updateStatus);
+
+        socket.on('esp32_update', function(data) {
+            console.log('Received ESP32 update:', data);
+            // Handle any specific ESP32 updates here
+        });
+
+        $('#settings-form').submit(function(e) {
+            e.preventDefault();
+            const formData = $(this).serializeArray();
+            const data = {};
+            formData.forEach(item => {
+                data[item.name] = item.value;
+            });
+
+            socket.emit('update_settings', data, function(response) {
+                showAlert(response.status === 'success' ? 'Settings updated successfully' : response.message, response.status !== 'success');
+            });
+        });
+
+        $('#reset-form').submit(function(e) {
+            e.preventDefault();
+            const formData = $(this).serializeArray();
+            const data = {};
+            formData.forEach(item => {
+                data[item.name] = item.value;
+            });
+
+            socket.emit('reset_device', data, function(response) {
+                showAlert(response.status === 'success' ? 'Device reset successfully' : response.message, response.status !== 'success');
+            });
+        });
+
+        // Request initial status when page loads
+        socket.emit('get_initial_status');
+    </script>
+    <script src="/static/script.js"></script>
+</body>
+</html>

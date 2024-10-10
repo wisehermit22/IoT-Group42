@@ -1,0 +1,29 @@
+# Virtual environment
+venv/
+
+# Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Database
+iot_device.db
+
+# Environment variables
+.env
+
+# IDE specific files
+.vscode/
+
+# Flask instance folder
+instance/
+
+# Log files
+*.log
+
+# Temporary files
+*.tmp
+
+# macOS specific files
+.DS_Store
