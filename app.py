@@ -16,9 +16,11 @@ socketio = SocketIO(app, cors_allowed_origins="*")
 
 class DeviceStatus(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    added_count = db.Column(db.Integer, default=0)
     consumption_count = db.Column(db.Integer, default=0)
     inventory_count = db.Column(db.Integer, default=0)
     lock_status = db.Column(db.Boolean, default=False)
+    lid_status = db.Column(db.Boolean, default=False)
     lockout_remaining = db.Column(db.Integer, default=0)
     consumption_limit = db.Column(db.Integer, default=2)
     lockout_timer = db.Column(db.Integer, default=30)
@@ -99,9 +101,11 @@ def handle_reset_device(data):
 
 def handle_esp32_status_update(data):
     status = get_or_create_device_status()
+    status.added_count = data['totalAddCount']
     status.consumption_count = data['totalRemCount']
-    status.inventory_count = data['totalAddCount'] - data['totalRemCount']
+    status.inventory_count = data['drinkCount']
     status.lock_status = data['lockState']
+    status.lid_status = data['lidClosed']
 
     # Calculate lockout remaining
     if status.lock_status:
@@ -120,12 +124,19 @@ def handle_esp32_status_update(data):
 
     socketio.emit('status_update', get_device_status())
 
+    if status.lid_status and status.consumption_count >= status.consumption_limit:
+        return {"action": "lock"}
+
+    return {"action": "unlock"}
+
 def get_device_status():
     status = get_or_create_device_status()
     return {
+        'added_count': status.added_count,
         'consumption_count': status.consumption_count,
         'inventory_count': status.inventory_count,
         'lock_status': status.lock_status,
+        'lid_status': status.lid_status,
         'lockout_remaining': status.lockout_remaining,
         'consumption_limit': status.consumption_limit,
         'lockout_timer': status.lockout_timer,
@@ -141,18 +152,16 @@ async def websocket_handler(websocket, path):
             print(f"Received message from client.")
             data = json.loads(message)
             print(data)
+
+            resp = {"action": "none"}
             if "totalRemCount" in data:
                 with app.app_context():
-                    handle_esp32_status_update(data)
-
-            # Send a response back to the client
-            resp = {"action": "none"}
+                    resp = handle_esp32_status_update(data)
 
             # Convert dictionary to JSON string
             resp_json = json.dumps(resp)
+            await websocket.send(resp_json)
 
-            await websocket.send("hi")
-            print(f"Message sent.")
     except websockets.ConnectionClosed as e:
         print(f"Client disconnected: {e}")
 

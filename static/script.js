@@ -7,15 +7,12 @@ socket.on('connect', function() {
 
 socket.on('status_update', function(data) {
     console.log('Received status update:', data);
-    document.getElementById('total-add-count').textContent = data.total_add_count;
-    document.getElementById('total-rem-count').textContent = data.total_rem_count;
-    document.getElementById('lock-status').textContent = data.lock_state ? 'Locked' : 'Unlocked';
-    document.getElementById('lid-status').textContent = data.lid_closed ? 'Closed' : 'Open';
-    document.getElementById('remaining-time').textContent = data.remaining_time;
-
-    // Update the form fields with the latest values
-    document.getElementById('drink-limit').value = data.drink_limit;
-    document.getElementById('cycle-duration').value = data.cycle_duration;
+    document.getElementById('inventory-count').textContent = data.inventory_count;
+    document.getElementById('total-add-count').textContent = data.added_count;
+    document.getElementById('total-rem-count').textContent = data.consumption_count;
+    document.getElementById('lock-status').textContent = data.lock_status ? 'Locked' : 'Unlocked';
+    document.getElementById('lid-status').textContent = data.lid_status ? 'Closed' : 'Open';
+    document.getElementById('remaining-time').textContent = data.lockout_remaining;
 });
 
 document.getElementById('settings-form').addEventListener('submit', function(e) {
