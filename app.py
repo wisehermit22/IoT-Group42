@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import os
 import asyncio
 import websockets
+import json
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 
@@ -133,13 +134,23 @@ def get_lockout_remaining(settings):
 
 # WebSocket handler (runs separately from Flask)
 async def websocket_handler(websocket, path):
+    # limit = 4
     print(f"Client connected: {path}")
 
     try:
         async for message in websocket:
-            print(f"Received message from client: {message}")
+            # print(f"Received message from client.")
+            # data = json.loads(message)
+            print(message)
+
             # Send a response back to the client
-            await websocket.send(f"Server received: {message}")
+            # resp = {"action": "none"}
+            #
+            # # Convert dictionary to JSON string
+            # resp_json = json.dumps(resp)
+
+            await websocket.send("hi")
+            print(f"Message sent. {resp}")
     except websockets.ConnectionClosed as e:
         print(f"Client disconnected: {e}")
 
