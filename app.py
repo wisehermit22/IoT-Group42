@@ -4,6 +4,8 @@ from flask_migrate import Migrate
 from flask_socketio import SocketIO, emit
 from datetime import datetime, timedelta
 import os
+import asyncio
+import websockets
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 
@@ -128,8 +130,48 @@ def get_lockout_remaining(settings):
         return int((settings.lockout_end_time - datetime.utcnow()).total_seconds())
     return 0
 
+
+# WebSocket handler (runs separately from Flask)
+async def websocket_handler(websocket, path):
+    print(f"Client connected: {path}")
+
+    try:
+        async for message in websocket:
+            print(f"Received message from client: {message}")
+            # Send a response back to the client
+            await websocket.send(f"Server received: {message}")
+    except websockets.ConnectionClosed as e:
+        print(f"Client disconnected: {e}")
+
+
+async def start_websocket_server():
+    # Start the WebSocket server on a separate port (e.g., 8765)
+    async with websockets.serve(websocket_handler, "0.0.0.0", 8765):
+        await asyncio.Future()  # Run forever
+
+
+def start_servers():
+    loop = asyncio.get_event_loop()
+
+    # Start the Flask-SocketIO server on one port (e.g., 5000)
+    flask_socketio_server = loop.run_in_executor(
+        None,
+        socketio.run,
+        app,  # debug mode
+        '0.0.0.0',  # host
+        5000  # port
+    )
+
+    # Start the WebSocket server on a different port (e.g., 8765)
+    websocket_server = start_websocket_server()
+
+    # Run both servers concurrently
+    loop.run_until_complete(asyncio.gather(flask_socketio_server, websocket_server))
+
+
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
         create_default_settings()
-    socketio.run(app, debug=True, host='0.0.0.0', port=5000)
+
+    start_servers()
