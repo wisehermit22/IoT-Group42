@@ -120,33 +120,30 @@ void loop() {
     Serial.println("Total drinks inserted: " + String(totalAddCount));
     Serial.println("Total drinks consumed: " + String(totalRemCount));
  
-    // If the total amount of removed drinks exceeds the limit (for this cycle) and the lid is closed, and the lock is unlocked, lock the lock. (commented out temporarily)
+    // If the total amount of removed drinks exceeds the limit (for this cycle) and the lid is closed, and the lock is unlocked, lock the lock. (commented out)
     // if (totalRemCount >= drinkLimit && lidClosed && !lockState) {
     //   lockDoor();
     //   Serial.println("Drink limit reached and lid closed. Container locked.");
     // }
  
-    // If the total number of
-    if (totalRemCount > drinkLimit) {
-      lockDuration += PENALTY_DURATION;
-      Serial.println("Penalty applied. Lock duration extended to " + String(lockDuration / 1000) + " seconds.");
-    }
+    // If the total number of consumed drinks exceeds the drink limit, apply a penalty. (commented out)
+    // if (totalRemCount > drinkLimit) {
+    //   lockDuration += PENALTY_DURATION;
+    //   Serial.println("Penalty applied. Lock duration extended to " + String(lockDuration / 1000) + " seconds.");
+    // }
   }
 
     // Defines the drink count as the number of added drinks (in total) minus the number of removed drinks (in total). This is not affected by cycles.
   drinkCount = totalAddCount2 - totalRemCount2;
  
-  if (millis() - cycleStartTime >= lockDuration) {
-    startNewCycle();
-  }
- 
-  // Send updates to server
+  // Sends an update to the server once the update interval is reached.
   if (millis() - lastUpdateTime >= UPDATE_INTERVAL) {
     sendStatusUpdate();
     lastUpdateTime = millis();
   }
 }
  
+// Handles different websocket events, including disconnection, connection and receiving a message.
 void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
   switch(type) {
     case WStype_DISCONNECTED:
@@ -161,41 +158,42 @@ void webSocketEvent(WStype_t type, uint8_t * payload, size_t length) {
   }
 }
  
-// 
+// Handles the event when a message is received from the server.
 void handleWebSocketMessage(uint8_t * payload, size_t length) {
+  // Stores and deserialises the received message from the JSON format.
   DynamicJsonDocument doc(1024);
   DeserializationError error = deserializeJson(doc, payload, length);
  
+  // If an error occurs with deserialising, print it out.
   if (error) {
     Serial.print(F("deserializeJson() failed: "));
     Serial.println(error.f_str());
     return;
   }
  
-
+  // If the message contaons an action section, perform the defined action.
   if (doc.containsKey("action")) {
     String action = doc["action"];
+    // Starts a new cycle if "reset" is received. 
+    // Unlocks the lock if "unlock" is received.
+    // Locks the lock if "lock" is received.
     if (action == "reset") {
       startNewCycle();
     } else if (action == "unlock") {
       unlockDoor();
     } else if (action == "lock") {
       lockDoor();
-    } else if (action == "update_settings") {
-      if (doc.containsKey("drink_limit") && doc.containsKey("cycle_duration")) {
-        drinkLimit = doc["drink_limit"].as<int>();
-        cycleDuration = doc["cycle_duration"].as<long>() * 1000; // Convert seconds to milliseconds
-        Serial.println("Updated settings - Drink limit: " + String(drinkLimit) + ", Cycle duration: " + String(cycleDuration / 1000) + " seconds");
-      }
-    } else if (action == "initial_status") {
-      // Handle initial status from server
-      if (doc.containsKey("consumption_count") && doc.containsKey("lock_status")) {
-        totalRemCount = doc["consumption_count"].as<int>();
-        lockState = doc["lock_status"].as<bool>();
-        // Update other relevant variables as needed
-        Serial.println("Received initial status from server");
-      }
     }
+    // Updates the status of several variables based on the server's initial status, if required. (commented out)
+    // } else if (action == "initial_status") {
+    //   // Handle initial status from server
+    //   if (doc.containsKey("consumption_count") && doc.containsKey("lock_status")) {
+    //     totalRemCount = doc["consumption_count"].as<int>();
+    //     lockState = doc["lock_status"].as<bool>();
+    //     // Update other relevant variables as needed
+    //     Serial.println("Received initial status from server");
+    //   }
+    // }
   }
 }
  
@@ -206,7 +204,7 @@ void sendStatusUpdate() {
   DynamicJsonDocument doc(1024);
   doc["totalAddCount"] = totalAddCount;
   doc["totalRemCount"] = totalRemCount;
-  doc["drinkCount"] = totalAddCount2 - totalRemCount2;
+  doc["drinkCount"] = drinkCount;
   doc["lockState"] = lockState;
   doc["lidClosed"] = lidClosed;
  
@@ -216,25 +214,29 @@ void sendStatusUpdate() {
   webSocket.sendTXT(output);
 }
  
-// TODO
+// Handles the logic for the switch states.
 int handleSwitch(ezButton &limitSwitch, String label) {
+  // If the switch is pressed down, this is true.
   if (limitSwitch.isPressed()) {
-
+    // Increases the count of added drinks by 1.
     totalAddCount += 1;
     totalAddCount2 += 1;
     
-    // Prints..
+    // Prints the slot that had a drink added and returns 0 (so consumption count is not increased).
     Serial.println("A drink in slot " + label + " was added.");
     return 0;
   }
+  // If the switch is released, this is true.
   if (limitSwitch.isReleased()) {
+    // Prints the slot that had a drink removed and returns 1 (so the consumption count is increased).
     Serial.println("A drink in slot " + label + " was removed.");
     return 1;
   }
+  // If no conditions are met, returns 0 (so the consumption count is not increased).
   return 0;
 }
  
-// Checks the status of the lid, if the reed
+// Checks the status of the lid and updates its status variable.
 void checkLidStatus() {
   // If reed switch is closed, newLidStatus is set to True.
   bool newLidStatus = (reedSwitch.getState() == LOW);
@@ -269,15 +271,10 @@ void unlockDoor() {
   }
   lockState = false;
 }
- 
+
+// If a new cycle begins, reset the current counts for removed and added drinks.
 void startNewCycle() {
-  cycleStartTime = millis();
   totalRemCount = 0;
-  totalAddCount = 0; // Reset this as well
-  drinkCount = 0; // Reset this as well
-  lockDuration = cycleDuration;
-  if (lockState) {
-    unlockDoor();
-  }
+  totalAddCount = 0;
   Serial.println("New cycle started. All counters reset.");
 }
