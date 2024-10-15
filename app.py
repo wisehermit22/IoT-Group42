@@ -65,18 +65,12 @@ def handle_get_initial_status():
 @socketio.on('update_settings')
 def handle_update_settings(data):
     try:
+        print(f"Updating settings: {data}")
         status = get_or_create_device_status()
         status.consumption_limit = int(data['consumption-limit'])
         status.lockout_timer = int(data['lockout-timer'])
-        status.inventory_count = int(data['inventory-count'])
         status.last_updated = datetime.utcnow()
         db.session.commit()
-
-        # Send updated settings to ESP32
-        socketio.emit('esp32_update_settings', {
-            'drink_limit': status.consumption_limit,
-            'cycle_duration': status.lockout_timer * 60  # Convert minutes to seconds
-        })
 
         emit('status_update', get_device_status())
         return {'status': 'success'}
@@ -149,9 +143,7 @@ async def websocket_handler(websocket, path):
 
     try:
         async for message in websocket:
-            print(f"Received message from client.")
             data = json.loads(message)
-            print(data)
 
             resp = {"action": "none"}
             if "totalRemCount" in data:
