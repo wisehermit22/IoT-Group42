@@ -14,6 +14,7 @@ socket.on('status_update', function(data) {
     document.getElementById('lock-status').textContent = data.lock_status ? 'Locked' : 'Unlocked';
     document.getElementById('lid-status').textContent = data.lid_status ? 'Closed' : 'Open';
     document.getElementById('remaining-time').textContent = data.lockout_remaining;
+    document.getElementById('cycle-end-time').textContent = data.cycle_end_time;
 });
 
 document.getElementById('settings-form').addEventListener('submit', function(e) {

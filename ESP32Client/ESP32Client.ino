@@ -5,11 +5,11 @@
 #include <ezButton.h>
  
 // Initialises the WiFi details.
-const char* ssid = "Yeah";
-const char* password = "Password";
+const char* ssid = "Arjun's Galaxy S20 FE";
+const char* password = "goat12345";
  
 // Initialises the websocket details.
-const char* websocket_server = "192.168.110.1";
+const char* websocket_server = "192.168.168.1";
 const int websocket_port = 8765;
  
 // Defines constants for execution.
@@ -272,7 +272,7 @@ void unlockDoor() {
   lockState = false;
 }
 
-// If a new cycle begins, reset the current counts for removed and added drinks.
+// stuff
 void startNewCycle() {
   totalRemCount = 0;
   totalAddCount = 0;

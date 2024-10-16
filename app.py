@@ -4,7 +4,7 @@ from flask_sqlalchemy import SQLAlchemy
 import websockets
 import asyncio
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'secret!'
@@ -12,6 +12,8 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///drink_tracker.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 socketio = SocketIO(app, cors_allowed_origins="*")
+
+reset_pending = False
 
 
 class DeviceStatus(db.Model):
@@ -24,24 +26,34 @@ class DeviceStatus(db.Model):
     lockout_remaining = db.Column(db.Integer, default=0)
     consumption_limit = db.Column(db.Integer, default=2)
     lockout_timer = db.Column(db.Integer, default=30)
-    last_updated = db.Column(db.DateTime, default=datetime.utcnow)
-
+    lockout_end_time = db.Column(db.DateTime, nullable=True)
+    cycle_start_time = db.Column(db.DateTime, nullable=True)
+    cycle_end_time = db.Column(db.DateTime, nullable=True)
+    cycle_duration = db.Column(db.Integer, default=24*60)
+    penalty_multiplier = db.Column(db.Float, default=1.5)
 
 class ConsumptionLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     count = db.Column(db.Integer)
 
-
 with app.app_context():
     db.create_all()
-
 
 def get_or_create_device_status():
     status = DeviceStatus.query.first()
     if not status:
         status = DeviceStatus()
+
+        now = datetime.utcnow()
+        status.cycle_start_time = now
+        status.lockout_end_time = None
+
         db.session.add(status)
+        db.session.commit()
+        status = DeviceStatus.query.first()
+
+        status.cycle_end_time = status.cycle_start_time + timedelta(seconds=status.cycle_duration)
         db.session.commit()
     return status
 
@@ -65,33 +77,40 @@ def handle_get_initial_status():
 @socketio.on('update_settings')
 def handle_update_settings(data):
     try:
-        print(f"Updating settings: {data}")
-        status = get_or_create_device_status()
-        status.consumption_limit = int(data['consumption-limit'])
-        status.lockout_timer = int(data['lockout-timer'])
-        status.last_updated = datetime.utcnow()
-        db.session.commit()
+        if data['confirmation-phrase'] == "I am not lying":
+            print(f"Updating settings: {data}")
+            status = get_or_create_device_status()
+            status.consumption_limit = int(data['consumption-limit'])
+            status.cycle_duration = int(data['cycle-duration'])
+            status.cycle_end_time = status.cycle_start_time + timedelta(seconds=status.cycle_duration)
 
-        emit('status_update', get_device_status())
-        return {'status': 'success'}
+            db.session.commit()
+
+            emit('status_update', get_device_status())
+            return {'status': 'success'}
+        return {'status': 'error', 'message': 'Confirmation phrase is incorrect.'}
     except ValueError:
         return {'status': 'error', 'message': 'Invalid input. Please enter numbers.'}
 
 
 @socketio.on('reset_device')
 def handle_reset_device(data):
-    status = get_or_create_device_status()
-    status.consumption_count = 0
-    status.lock_status = False
-    status.lockout_remaining = 0
-    status.last_updated = datetime.utcnow()
-    db.session.commit()
+    if data['confirmation_phrase'] == "I am not lying":
+        global reset_pending
+        reset_pending = True
 
-    # Send reset command to ESP32
-    socketio.emit('esp32_reset')
+        status = get_or_create_device_status()
+        status.consumption_count = 0
+        status.lock_status = False
+        status.lockout_remaining = 0
+        status.lockout_end_time = None
+        status.cycle_start_time = datetime.utcnow()
+        db.session.commit()
 
-    emit('status_update', get_device_status())
-    return {'status': 'success'}
+        emit('status_update', get_device_status())
+
+        return {'status': 'success'}
+    return {'status': 'error', 'message': 'Confirmation phrase is incorrect.'}
 
 def handle_esp32_status_update(data):
     status = get_or_create_device_status()
@@ -101,11 +120,17 @@ def handle_esp32_status_update(data):
     status.lock_status = data['lockState']
     status.lid_status = data['lidClosed']
 
+
     # Calculate lockout remaining
-    if status.lock_status:
-        status.lockout_remaining = status.lockout_timer * 60  # Convert minutes to seconds
+    if status.lockout_remaining >= 1:
+        now = datetime.utcnow()
+        status.lockout_remaining = max(0, int((status.lockout_end_time - now).total_seconds()))
+
+        if status.lockout_remaining == 0:
+            status.lockout_end_time = None
     else:
         status.lockout_remaining = 0
+        status.lockout_end_time = None
 
     status.last_updated = datetime.utcnow()
     db.session.commit()
@@ -119,9 +144,38 @@ def handle_esp32_status_update(data):
     socketio.emit('status_update', get_device_status())
 
     if status.lid_status and status.consumption_count >= status.consumption_limit:
+        penalty = max(0, status.consumption_count - status.consumption_limit)
+
+        if status.lockout_end_time is None:
+            if penalty >= 1:
+                status.lockout_end_time = status.cycle_start_time + timedelta(seconds=(status.cycle_duration * status.penalty_multiplier))
+            else:
+                status.lockout_end_time = status.cycle_end_time
+
+        now = datetime.utcnow()
+        status.lockout_remaining = max(0, int((status.lockout_end_time - now).total_seconds()))
+
+        db.session.commit()
         return {"action": "lock"}
 
+    if status.lockout_remaining >= 1:
+        return {"action": "lock"}
     return {"action": "unlock"}
+
+def check_and_reset_cycle():
+    status = get_or_create_device_status()
+
+    now = datetime.utcnow()
+    if status.cycle_end_time <= now:
+        status.cycle_start_time = now
+        status.consumption_count = 0
+        status.added_drinks_count = 0  # Reset added drinks count at the start of a new cycle
+        status.lock_status = False
+        status.cycle_end_time = status.cycle_start_time + timedelta(seconds=status.cycle_duration)
+        db.session.commit()
+
+        global reset_pending
+        reset_pending = True
 
 def get_device_status():
     status = get_or_create_device_status()
@@ -133,7 +187,8 @@ def get_device_status():
         'lid_status': status.lid_status,
         'lockout_remaining': status.lockout_remaining,
         'consumption_limit': status.consumption_limit,
-        'lockout_timer': status.lockout_timer,
+        'lockout_timer': status.lockout_remaining,
+        'cycle_end_time': (status.cycle_end_time + timedelta(hours=8)).strftime("%m/%d/%Y, %I:%M:%S %p"),
     }
 
 # WebSocket handler (runs separately from Flask)
@@ -144,9 +199,17 @@ async def websocket_handler(websocket, path):
     try:
         async for message in websocket:
             data = json.loads(message)
-
             resp = {"action": "none"}
-            if "totalRemCount" in data:
+            print(data)
+
+            with app.app_context():
+                check_and_reset_cycle()
+
+            global reset_pending
+            if reset_pending:
+                resp = {"action": "reset"}
+                reset_pending = False
+            elif "totalRemCount" in data:
                 with app.app_context():
                     resp = handle_esp32_status_update(data)
 
