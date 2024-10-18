@@ -9,7 +9,7 @@ const char* ssid = "Arjun's Galaxy S20 FE";
 const char* password = "goat12345";
  
 // Initialises the websocket details.
-const char* websocket_server = "192.168.168.1";
+const char* websocket_server = "192.168.216.226";
 const int websocket_port = 8765;
  
 // Defines constants for execution.
@@ -272,7 +272,7 @@ void unlockDoor() {
   lockState = false;
 }
 
-// stuff
+// Begins a new consumption cycle, resetting the counts of certain variables.
 void startNewCycle() {
   totalRemCount = 0;
   totalAddCount = 0;
