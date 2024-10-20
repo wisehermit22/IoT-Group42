@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, jsonify
 from flask_socketio import SocketIO, emit
 from flask_sqlalchemy import SQLAlchemy
 import websockets
@@ -31,11 +31,17 @@ class DeviceStatus(db.Model):
     cycle_end_time = db.Column(db.DateTime, nullable=True)
     cycle_duration = db.Column(db.Integer, default=24*60)
     penalty_multiplier = db.Column(db.Float, default=1.5)
+    current_streak = db.Column(db.Integer, default=0)
+    highest_streak = db.Column(db.Integer, default=0)
 
 class ConsumptionLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     count = db.Column(db.Integer)
+    cycle_start = db.Column(db.DateTime)
+    cycle_end = db.Column(db.DateTime)
+    limit_exceeded = db.Column(db.Boolean)
+    consumption_limit = db.Column(db.Integer)
 
 with app.app_context():
     db.create_all()
@@ -114,12 +120,12 @@ def handle_reset_device(data):
 
 def handle_esp32_status_update(data):
     status = get_or_create_device_status()
+    prev_consumption_count = status.consumption_count
     status.added_count = data['totalAddCount']
     status.consumption_count = data['totalRemCount']
     status.inventory_count = data['drinkCount']
     status.lock_status = data['lockState']
     status.lid_status = data['lidClosed']
-
 
     # Calculate lockout remaining
     if status.lockout_remaining >= 1:
@@ -133,14 +139,27 @@ def handle_esp32_status_update(data):
         status.lockout_end_time = None
 
     status.last_updated = datetime.utcnow()
-    db.session.commit()
-
+    
     # Log consumption
-    if data['totalRemCount'] > status.consumption_count:
-        log = ConsumptionLog(count=data['totalRemCount'] - status.consumption_count)
-        db.session.add(log)
-        db.session.commit()
+    if status.consumption_count > prev_consumption_count:
+        consumption_difference = status.consumption_count - prev_consumption_count
+        existing_log = ConsumptionLog.query.filter_by(cycle_start=status.cycle_start_time).first()
+        
+        if existing_log:
+            existing_log.count += consumption_difference
+            existing_log.limit_exceeded = (existing_log.count > status.consumption_limit)
+            existing_log.consumption_limit = status.consumption_limit  # Update this line
+        else:
+            new_log = ConsumptionLog(
+                count=consumption_difference,
+                cycle_start=status.cycle_start_time,
+                cycle_end=status.cycle_end_time,
+                limit_exceeded=(status.consumption_count > status.consumption_limit),
+                consumption_limit=status.consumption_limit  # Add this line
+            )
+            db.session.add(new_log)
 
+    db.session.commit()
     socketio.emit('status_update', get_device_status())
 
     if status.lid_status and status.consumption_count >= status.consumption_limit:
@@ -162,20 +181,70 @@ def handle_esp32_status_update(data):
         return {"action": "lock"}
     return {"action": "unlock"}
 
+def update_streak(status, limit_exceeded):
+    if limit_exceeded:
+        status.current_streak = 0
+    else:
+        status.current_streak += 1
+        if status.current_streak > status.highest_streak:
+            status.highest_streak = status.current_streak
+    db.session.commit()
+
 def check_and_reset_cycle():
     status = get_or_create_device_status()
-
     now = datetime.utcnow()
     if status.cycle_end_time <= now:
+        limit_exceeded = status.consumption_count > status.consumption_limit
+        update_streak(status, limit_exceeded)
+        
+        # Update the existing log for this cycle instead of creating a new one
+        existing_log = ConsumptionLog.query.filter_by(cycle_start=status.cycle_start_time).first()
+        if existing_log:
+            existing_log.count = status.consumption_count
+            existing_log.limit_exceeded = limit_exceeded
+        else:
+            # If no log exists (shouldn't happen), create a new one
+            log = ConsumptionLog(
+                count=status.consumption_count,
+                cycle_start=status.cycle_start_time,
+                cycle_end=status.cycle_end_time,
+                limit_exceeded=limit_exceeded
+            )
+            db.session.add(log)
+        
+        # Reset cycle
         status.cycle_start_time = now
-        status.consumption_count = 0
-        status.added_drinks_count = 0  # Reset added drinks count at the start of a new cycle
-        status.lock_status = False
         status.cycle_end_time = status.cycle_start_time + timedelta(seconds=status.cycle_duration)
+        status.consumption_count = 0
+        status.added_count = 0
+        status.lock_status = False
+        status.lockout_end_time = None
+        status.lockout_remaining = 0
         db.session.commit()
 
         global reset_pending
         reset_pending = True
+
+
+@app.route('/api/consumption_history')
+def consumption_history():
+    logs = ConsumptionLog.query.order_by(ConsumptionLog.cycle_start.desc()).limit(30).all()
+    status = get_or_create_device_status()
+    history = [{
+        'cycle_start': log.cycle_start.isoformat(),
+        'cycle_end': log.cycle_end.isoformat(),
+        'count': log.count,
+        'limit_exceeded': log.limit_exceeded,
+        'consumption_limit': log.consumption_limit  # Add this line
+    } for log in logs]
+    
+    status = get_or_create_device_status()
+    return jsonify({
+        'history': history,
+        'current_streak': status.current_streak,
+        'highest_streak': status.highest_streak,
+        'current_consumption_limit': status.consumption_limit
+    })
 
 def get_device_status():
     status = get_or_create_device_status()
@@ -189,7 +258,12 @@ def get_device_status():
         'consumption_limit': status.consumption_limit,
         'lockout_timer': status.lockout_remaining,
         'cycle_end_time': (status.cycle_end_time + timedelta(hours=8)).strftime("%m/%d/%Y, %I:%M:%S %p"),
+        'current_streak': status.current_streak,
+        'highest_streak': status.highest_streak,
+        'cycle_start_time': status.cycle_start_time.isoformat(),
+        'cycle_end_time_iso': status.cycle_end_time.isoformat(),
     }
+
 
 # WebSocket handler (runs separately from Flask)
 async def websocket_handler(websocket, path):
@@ -228,7 +302,12 @@ async def start_websocket_server():
 
 
 def start_servers():
-    loop = asyncio.get_event_loop()
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
 
     # Start the Flask-SocketIO server on one port (e.g., 5000)
     flask_socketio_server = loop.run_in_executor(
