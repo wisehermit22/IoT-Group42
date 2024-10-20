@@ -4,52 +4,67 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Smart Drink Consumption Tracker</title>
+    <!-- Socket.IO client library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <!-- Tailwind CSS for styling -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js for data visualization -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="bg-gradient-to-r from-blue-100 to-purple-100 font-sans min-h-screen">
     <div class="container mx-auto px-4 py-8">
+        <!-- Main title -->
         <h1 class="text-4xl font-bold text-center mb-8 text-blue-700 shadow-text">Smart Drink Consumption Tracker</h1>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <!-- Current Status Section -->
             <div class="bg-white shadow-lg rounded-xl p-6 transition-all duration-300 hover:shadow-xl">
                 <h2 class="text-2xl font-semibold mb-4 text-gray-800 border-b pb-2">Current Status</h2>
                 <div class="grid grid-cols-2 gap-4" id="status">
+                    <!-- Inventory Count -->
                     <div class="bg-gradient-to-br from-blue-50 to-blue-100 p-3 rounded-lg shadow">
                         <p class="text-sm text-gray-600">Inventory Count</p>
                         <p class="text-xl font-bold text-blue-700" id="inventory-count">0</p>
                     </div>
+                    <!-- Total Added -->
                     <div class="bg-gradient-to-br from-green-50 to-green-100 p-3 rounded-lg shadow">
                         <p class="text-sm text-gray-600">Total Added</p>
                         <p class="text-xl font-bold text-green-700" id="total-add-count">0</p>
                     </div>
+                    <!-- Total Removed -->
                     <div class="bg-gradient-to-br from-red-50 to-red-100 p-3 rounded-lg shadow">
                         <p class="text-sm text-gray-600">Total Removed</p>
                         <p class="text-xl font-bold text-red-700" id="total-rem-count">0</p>
                     </div>
+                    <!-- Drink Limit -->
                     <div class="bg-gradient-to-br from-yellow-50 to-yellow-100 p-3 rounded-lg shadow">
                         <p class="text-sm text-gray-600">Drink Limit</p>
                         <p class="text-xl font-bold text-yellow-700" id="consumption-limit">0</p>
                     </div>
+                    <!-- Lock Status -->
                     <div class="bg-gradient-to-br from-purple-50 to-purple-100 p-3 rounded-lg shadow">
                         <p class="text-sm text-gray-600">Lock Status</p>
                         <p class="text-xl font-bold text-purple-700" id="lock-status">Unlocked</p>
                     </div>
+                    <!-- Lid Status -->
                     <div class="bg-gradient-to-br from-indigo-50 to-indigo-100 p-3 rounded-lg shadow">
                         <p class="text-sm text-gray-600">Lid Status</p>
                         <p class="text-xl font-bold text-indigo-700" id="lid-status">Open</p>
                     </div>
+                    <!-- Lockout Countdown -->
                     <div class="bg-gradient-to-br from-pink-50 to-pink-100 p-3 rounded-lg shadow col-span-2">
                         <p class="text-sm text-gray-600">Lockout Countdown</p>
                         <p class="text-xl font-bold text-pink-700"><span id="remaining-time">0</span> seconds</p>
                     </div>
+                    <!-- Cycle End Time -->
                     <div class="bg-gradient-to-br from-teal-50 to-teal-100 p-3 rounded-lg shadow col-span-2">
                         <p class="text-sm text-gray-600">Cycle End Time</p>
                         <p class="text-xl font-bold text-teal-700" id="cycle-end-time">None</p>
                     </div>
                 </div>
             </div>
+
+            <!-- Consumption History Chart Section -->
             <div class="bg-white shadow-lg rounded-xl p-6 transition-all duration-300 hover:shadow-xl">
                 <h2 class="text-2xl font-semibold mb-4 text-gray-800 border-b pb-2">Consumption History</h2>
                 <div class="h-96">
@@ -57,15 +72,16 @@
                 </div>
             </div>
             
-
-
+            <!-- Consumption Streaks Section -->
             <div class="bg-white shadow-lg rounded-xl p-6 transition-all duration-300 hover:shadow-xl">
                 <h2 class="text-2xl font-semibold mb-4 text-gray-800 border-b pb-2">Consumption Streaks</h2>
                 <div class="grid grid-cols-2 gap-4">
+                    <!-- Current Streak -->
                     <div class="bg-gradient-to-br from-blue-50 to-blue-100 p-6 h-32 rounded-lg shadow">
                         <p class="text-sm text-gray-600">Current Streak</p>
                         <p class="text-2xl font-bold text-blue-700" id="current-streak">0</p>
                     </div>
+                    <!-- Highest Streak -->
                     <div class="bg-gradient-to-br from-green-50 to-green-100 p-6 h-32 rounded-lg shadow">
                         <p class="text-sm text-gray-600">Highest Streak</p>
                         <p class="text-2xl font-bold text-green-700" id="highest-streak">0</p>
@@ -73,39 +89,47 @@
                 </div>
             </div>
             
-
+            <!-- Update Settings Section -->
             <div class="bg-white shadow-lg rounded-xl p-6 transition-all duration-300 hover:shadow-xl">
                 <h2 class="text-2xl font-semibold mb-4 text-gray-800 border-b pb-2">Update Settings</h2>
                 <form id="settings-form" class="space-y-4">
+                    <!-- Drink Limit Input -->
                     <div>
                         <label for="drink-limit" class="block text-sm font-medium text-gray-700">Drink Limit</label>
                         <input type="number" id="consumption-limit" name="consumption-limit" required class="w-full px-3 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300">
                     </div>
+                    <!-- Cycle Duration Input -->
                     <div>
                         <label for="cycle-duration" class="block text-sm font-medium text-gray-700">Cycle Duration (seconds)</label>
                         <input type="number" id="cycle-duration" name="cycle-duration" required class="w-full px-3 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300">
                     </div>
+                    <!-- Confirmation Phrase Input -->
                     <div>
                         <label for="confirmation-phrase" class="block text-sm font-medium text-gray-700">Confirmation Phrase</label>
                         <input type="text" id="confirmation-phrase" name="confirmation-phrase" required class="w-full px-3 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all duration-300">
                     </div>
+                    <!-- Submit Button -->
                     <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2">Update Settings</button>
                 </form>
             </div>
         </div>
 
+        <!-- Reset Device Section -->
         <div class="mt-8 bg-white shadow-lg rounded-xl p-6 transition-all duration-300 hover:shadow-xl">
             <h2 class="text-2xl font-semibold mb-4 text-gray-800 border-b pb-2">Reset Device</h2>
             <form id="reset-form" class="space-y-4">
+                <!-- Reset Confirmation Phrase Input -->
                 <div>
                     <label for="reset-confirmation" class="block text-sm font-medium text-gray-700">Confirmation Phrase</label>
                     <input type="text" id="reset-confirmation" name="confirmation_phrase" required class="w-full px-3 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-red-500 transition-all duration-300">
                 </div>
+                <!-- Reset Button -->
                 <button type="submit" class="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-md transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2">Reset Device</button>
             </form>
         </div>
     </div>
 
+    <!-- JS script -->
     <script src="/static/script.js"></script>
 </body>
 </html>

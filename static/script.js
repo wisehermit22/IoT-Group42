@@ -1,18 +1,27 @@
+// Initialize Socket.IO connection
 const socket = io();
 
+// Event listener for successful connection to the server
 socket.on('connect', function() {
     console.log('Connected to server');
+    // Request initial status from the server
     socket.emit('get_initial_status');
+    // Fetch consumption history data
     fetchConsumptionHistory();
 });
 
+// Event listener for status updates from the server
 socket.on('status_update', function(data) {
     console.log('Received status update:', data);
+    // Update the UI with the new status
     updateStatusDisplay(data);
+    // Refresh the consumption history
     fetchConsumptionHistory();
 });
 
+// Function to update the status display in the UI
 function updateStatusDisplay(data) {
+    // Update various UI elements with the latest data
     document.getElementById('inventory-count').textContent = data.inventory_count;
     document.getElementById('total-add-count').textContent = data.added_count;
     document.getElementById('total-rem-count').textContent = data.consumption_count;
@@ -25,21 +34,23 @@ function updateStatusDisplay(data) {
     document.getElementById('highest-streak').textContent = data.highest_streak;
 }
 
-
+// Function to update the streak display in the UI
 function updateStreakDisplay(data) {
     document.getElementById('current-streak').textContent = data.current_streak;
     document.getElementById('highest-streak').textContent = data.highest_streak;
 }
 
-
+// Variable to store the Chart.js instance
 let consumptionChart = null;
 
+// Function to create or update the consumption chart
 function createConsumptionChart(history) {
     const ctx = document.getElementById('consumptionChart').getContext('2d');
     
+    // Prepare data for the chart
     const labels = history.map(entry => {
         const date = new Date(entry.cycle_start);
-        date.setHours(date.getHours() + 8);
+        date.setHours(date.getHours() + 8); // Adjust for timezone
         return date.toLocaleString('en-US', { 
             hour: '2-digit', 
             minute: '2-digit', 
@@ -50,14 +61,15 @@ function createConsumptionChart(history) {
     const consumptionData = history.map(entry => entry.count);
     const limitExceeded = history.map(entry => {
         if (entry.count < entry.consumption_limit) {
-            return 'rgba(75, 192, 192, 0.7)';  // Softer teal color
+            return 'rgba(75, 192, 192, 0.7)';  // Softer teal color for under limit
         } else if (entry.count === entry.consumption_limit) {
-            return 'rgba(255, 206, 86, 0.7)';  // Softer yellow
+            return 'rgba(255, 206, 86, 0.7)';  // Softer yellow for at limit
         } else {
-            return 'rgba(255, 99, 132, 0.7)';  // Softer red
+            return 'rgba(255, 99, 132, 0.7)';  // Softer red for over limit
         }
     });
 
+    // Chart configuration
     const chartConfig = {
         type: 'bar',
         data: {
@@ -93,7 +105,6 @@ function createConsumptionChart(history) {
                             size: 14,
                             weight: 'bold'
                         },
-                        
                     },
                     ticks: {
                         stepSize: 1,
@@ -194,7 +205,7 @@ function createConsumptionChart(history) {
     }
 }
 
-
+// Function to fetch consumption history from the server
 function fetchConsumptionHistory() {
     fetch('/api/consumption_history')
         .then(response => response.json())
@@ -205,7 +216,7 @@ function fetchConsumptionHistory() {
         .catch(error => console.error('Error fetching consumption history:', error));
 }
 
-
+// Event listener for settings form submission
 document.getElementById('settings-form').addEventListener('submit', function(e) {
     e.preventDefault();
     const formData = new FormData(e.target);
@@ -213,20 +224,24 @@ document.getElementById('settings-form').addEventListener('submit', function(e) 
     const submitButton = this.querySelector('button[type="submit"]');
     const originalText = submitButton.textContent;
 
+    // Update button state
     submitButton.textContent = 'Updating...';
     submitButton.disabled = true;
 
+    // Send settings update to server
     socket.emit('update_settings', data, function(response) {
         if (response.status === 'success') {
             showToast('Settings updated successfully', 'success');
         } else {
             showToast('Failed to update settings: ' + response.message, 'error');
         }
+        // Restore button state
         submitButton.textContent = originalText;
         submitButton.disabled = false;
     });
 });
 
+// Event listener for reset form submission
 document.getElementById('reset-form').addEventListener('submit', function(e) {
     e.preventDefault();
     const formData = new FormData(e.target);
@@ -234,26 +249,31 @@ document.getElementById('reset-form').addEventListener('submit', function(e) {
     const submitButton = this.querySelector('button[type="submit"]');
     const originalText = submitButton.textContent;
 
+    // Update button state
     submitButton.textContent = 'Resetting...';
     submitButton.disabled = true;
 
+    // Send reset request to server
     socket.emit('reset_device', data, function(response) {
         if (response.status === 'success') {
             showToast('Device reset successfully', 'success');
         } else {
             showToast('Failed to reset device: ' + response.message, 'error');
         }
+        // Restore button state
         submitButton.textContent = originalText;
         submitButton.disabled = false;
     });
 });
 
+// Function to show toast notifications
 function showToast(message, type) {
     const toast = document.createElement('div');
     toast.textContent = message;
     toast.className = `fixed bottom-4 right-4 p-4 rounded-md text-white ${type === 'success' ? 'bg-green-500' : 'bg-red-500'} transition-opacity duration-300`;
     document.body.appendChild(toast);
 
+    // Fade out and remove toast after 3 seconds
     setTimeout(() => {
         toast.style.opacity = '0';
         setTimeout(() => {
@@ -262,9 +282,10 @@ function showToast(message, type) {
     }, 3000);
 }
 
+// Event listener for window resize
 window.addEventListener('resize', function() {
-    fetchConsumptionHistory(); // This will recreate the chart
+    fetchConsumptionHistory(); // Recreate the chart on window resize
 });
 
-// Initial fetch
+// Initial fetch of consumption history
 fetchConsumptionHistory();
