@@ -5,8 +5,8 @@
 #include <ezButton.h>
  
 // Initialises the WiFi details.
-const char* ssid = "Arjun's Galaxy S20 FE";
-const char* password = "goat12345";
+const char* ssid = "Arjun's Galaxy S20 FE"; // Change to your ssid
+const char* password = "goat12345";  // change to your passowrd
  
 // Initialises the websocket details.
 const char* websocket_server = "192.168.216.226";
