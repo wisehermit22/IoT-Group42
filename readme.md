@@ -5,9 +5,13 @@ The Intelligent Soft Drink Consumption Manager is an IoT-based system designed t
 ## Made by:
 
 Janki Prafulbhai Rangani (24095031) 
+
 Daivik Anil (22987816) 
+
 Wangyanlin Li (24212962) 
+
 Arjun Kang (22984924) 
+
 Winky Loong (24037833) 
 
 ## Hardware setup:
@@ -21,13 +25,18 @@ Winky Loong (24037833)
 ## Hardware coding setup:
 
 In your arduino software, download following libraries:
-WebSockets library
+WebSockets library 
+
 ezButton library
+
 ArduinoJson library
 
 Paste the code of ESP32Client.ino in your file.
+
 Change the wifi settings in the file.
+
 Choose the board as esp32 firebeetle v1 and port of your connection.
+
 Verify and upload it.
 
 ## software setup:
