@@ -45,12 +45,12 @@ Clone this Repository to your device.
 
 Ensure ESP32 device is connected to the same wifi and uses the local IP address of the app.
 
-To run the flask app:
-1) install requirements using "pip freeze > requirements.txt"
+To run the Flask app:
+1) Install requirements using "pip install -r requirements.txt"
 2) Start up a virtual environment and activate scripts:
     "python -m venv myenv"
     "myenv\Scripts\activate"
-3) run "python app.py" in the terminal
+3) Run "python app.py" in the terminal
 4) Click on the host link to view the app
 
 
